@@ -16,12 +16,16 @@ from sentry.models import (
     GroupTombstone, ExternalIssue, Integration, Release, OrganizationIntegration, UserOption
 )
 from sentry.models.event import Event
-from sentry.testutils import APITestCase
+from sentry.testutils import APITestCase, SnubaTestCase
 from sentry.testutils.helpers import parse_link_header
 from six.moves.urllib.parse import quote
 
 
-class GroupListTest(APITestCase):
+class GroupListTest(APITestCase, SnubaTestCase):
+    def setUp(self):
+        super(GroupListTest, self).setUp()
+        self.min_ago = timezone.now() - timedelta(minutes=1)
+
     def _parse_links(self, header):
         # links come in {url: {...attrs}}, but we need {rel: {...attrs}}
         links = {}
@@ -72,14 +76,22 @@ class GroupListTest(APITestCase):
     def test_simple_pagination(self):
         now = timezone.now().replace(microsecond=0)
         group1 = self.create_group(
-            checksum='a' * 32,
-            last_seen=now - timedelta(seconds=1),
+            project=self.project,
+            last_seen=now - timedelta(seconds=2),
+        )
+        self.create_event(
+            group=group1,
+            datetime=now - timedelta(seconds=2),
         )
         group2 = self.create_group(
-            checksum='b' * 32,
-            last_seen=now,
+            project=self.project,
+            last_seen=now - timedelta(seconds=1),
         )
-
+        self.create_event(
+            stacktrace=[['foo.py']],
+            group=group2,
+            datetime=now - timedelta(seconds=1),
+        )
         self.login_as(user=self.user)
         response = self.client.get(
             u'{}?sort_by=date&limit=1'.format(self.path),
@@ -103,39 +115,6 @@ class GroupListTest(APITestCase):
 
         assert links['previous']['results'] == 'true'
         assert links['next']['results'] == 'false'
-
-        # TODO(dcramer): not working correctly
-        # print(links['previous']['cursor'])
-        # response = self.client.get(links['previous']['href'], format='json')
-        # assert response.status_code == 200
-        # assert len(response.data) == 1
-        # assert response.data[0]['id'] == six.text_type(group2.id)
-
-        # links = self._parse_links(response['Link'])
-
-        # assert links['previous']['results'] == 'false'
-        # assert links['next']['results'] == 'true'
-
-        # print(links['previous']['cursor'])
-        # response = self.client.get(links['previous']['href'], format='json')
-        # assert response.status_code == 200
-        # assert len(response.data) == 0
-
-        # group3 = self.create_group(
-        #     checksum='c' * 32,
-        #     last_seen=now + timedelta(seconds=1),
-        # )
-
-        # links = self._parse_links(response['Link'])
-
-        # assert links['previous']['results'] == 'false'
-        # assert links['next']['results'] == 'true'
-
-        # print(links['previous']['cursor'])
-        # response = self.client.get(links['previous']['href'], format='json')
-        # assert response.status_code == 200
-        # assert len(response.data) == 1
-        # assert response.data[0]['id'] == six.text_type(group3.id)
 
     def test_stats_period(self):
         # TODO(dcramer): this test really only checks if validation happens
@@ -321,20 +300,12 @@ class GroupListTest(APITestCase):
     def test_lookup_by_release(self):
         self.login_as(self.user)
         project = self.project
-        project2 = self.create_project(name='baz', organization=project.organization)
         release = Release.objects.create(organization=project.organization, version='12345')
         release.add_project(project)
-        release.add_project(project2)
-        group = self.create_group(checksum='a' * 32, project=project)
-        group2 = self.create_group(checksum='b' * 32, project=project2)
-        tagstore.create_group_tag_value(
-            project_id=project.id, group_id=group.id, environment_id=None,
-            key='sentry:release', value=release.version
-        )
-
-        tagstore.create_group_tag_value(
-            project_id=project2.id, group_id=group2.id, environment_id=None,
-            key='sentry:release', value=release.version
+        self.create_event(
+            group=self.group,
+            datetime=self.min_ago,
+            tags={'sentry:release': release.version},
         )
 
         url = '%s?query=%s' % (self.path, quote('release:"%s"' % release.version))
@@ -342,7 +313,7 @@ class GroupListTest(APITestCase):
         issues = json.loads(response.content)
         assert response.status_code == 200
         assert len(issues) == 1
-        assert int(issues[0]['id']) == group.id
+        assert int(issues[0]['id']) == self.group.id
 
     def test_pending_delete_pending_merge_excluded(self):
         self.create_group(
