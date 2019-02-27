@@ -18,8 +18,9 @@ from sentry.models import (
 )
 from sentry.search.base import ANY
 from sentry.search.django.backend import DjangoSearchBackend
-from sentry.tagstore.v2.backend import AGGREGATE_ENVIRONMENT_ID
 from sentry.testutils import TestCase
+
+AGGREGATE_ENVIRONMENT_ID = 0
 
 
 def date_to_query_format(date):
