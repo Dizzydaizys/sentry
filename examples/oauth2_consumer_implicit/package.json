@@ -13,7 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "babel-core": "^6.23.1",
-    "babel-loader": "^6.3.2",
+    "babel-loader": "^7.1.0",
     "babel-preset-env": "^1.2.0",
     "http-server": "^0.9.0",
     "oauth2-implicit": "^0.7.0",
