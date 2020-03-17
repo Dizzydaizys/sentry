@@ -89,7 +89,7 @@
     "svgo-loader": "^2.1.0",
     "u2f-api": "0.2.3",
     "webpack": "^4.28.1",
-    "webpack-cli": "^3.1.2",
+    "webpack-cli": "^3.3.5",
     "webpack-fix-style-only-entries": "^0.2.0",
     "zxcvbn": "^4.4.2"
   },
